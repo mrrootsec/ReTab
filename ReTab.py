@@ -56,14 +56,14 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
     def getUiComponent(self):
         return self._ui_scroll
 
-    # ─── IContextMenuFactory ──────────────────────────────���───────
+    # ─── IContextMenuFactory ─────────────────────────────────────
 
     def createMenuItems(self, ctx):
         if not ctx.getSelectedMessages():
             return None
         items = ArrayList()
         items.add(JMenuItem(
-            "Send to Repeater (Smart Name)",
+            "Send to Repeater (ReTab)",
             actionPerformed=lambda _: self._on_send(ctx)))
         return items
 
