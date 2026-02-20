@@ -12,11 +12,15 @@ The new tab will have a clear, readable name based on what the request actually 
 
 Instead of:
 
-`7`, `8`, `9`, `10`
+`1`, `2`, `3`, `4`
+<img width="1436" height="765" alt="image" src="https://github.com/user-attachments/assets/2b60c222-f98a-46a6-bacb-1c63b147c620" />
+
 
 You get:
 
 `POST-/api/v2/auth/login`, `GET-GetAccountDetails`, `POST-/profile/{id}`
+<img width="1434" height="739" alt="image" src="https://github.com/user-attachments/assets/4c844b3a-94e6-4f72-b93c-4972e675a06f" />
+
 
 It just gives your Repeater tabs useful names.
 
