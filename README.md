@@ -1,5 +1,7 @@
 # ReTab
 
+<img width="1024" height="700" alt="image" src="https://github.com/user-attachments/assets/a7094cef-5f63-4d21-ae67-ad68f8289c1d" />
+
 If you’ve used Burp Repeater for more than a few minutes, you know the problem.
 
 You send a bunch of requests, and suddenly your tabs are named `1`, `2`, `3` … or just the same hostname over and over. After 10 tabs, you’re clicking through each one trying to remember which was the login request. After 50 tabs, it’s complete mess.
