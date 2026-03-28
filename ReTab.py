@@ -2,14 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-ReTab — Adds a context menu to send requests to Repeater with auto-generated tab names.
+ReTab — Adds a context menu to send requests to Repeater with auto-generated tab names. Made with <3 by https://github.com/mrrootsec/ReTab
 """
 from burp import IBurpExtender, IContextMenuFactory, ITab
-from javax.swing import (
-    JPanel, JCheckBox, JLabel, JTextField, JScrollPane,
-    JMenuItem, BorderFactory, Box, BoxLayout, SwingUtilities,
-    JTabbedPane                                                        
-)
+from javax.swing import ( JPanel, JCheckBox, JLabel, JTextField, JScrollPane, JMenuItem, BorderFactory, Box, BoxLayout, SwingUtilities, JTabbedPane )
 from java.awt import Font, Color, Dimension
 from java.util import ArrayList
 from java.net import URLDecoder
@@ -50,7 +46,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self._opt_auth   = True
         self._opt_host   = False
         self._opt_debug  = False
-        self._opt_focus  = True                                        
+        self._opt_focus  = True
         self._opt_maxlen = 60
 
         callbacks.setExtensionName("ReTab")
@@ -441,7 +437,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self._ui_host   = _ui_checkbox(root, "Include host prefix",           "api-POST-/users for multi-host testing", self._opt_host)
 
         root.add(Box.createVerticalStrut(14))
-        root.add(_ui_section("Behavior"))                                                                      
+        root.add(_ui_section("Behavior"))
         self._ui_focus = _ui_checkbox(root, "Auto-switch to Repeater tab",    "Jump to Repeater after send",  self._opt_focus)
 
         root.add(Box.createVerticalStrut(14))
@@ -487,7 +483,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         except Exception: pass
         try: self._opt_host = self._ui_host.isSelected()
         except Exception: pass
-        try: self._opt_focus = self._ui_focus.isSelected()             
+        try: self._opt_focus = self._ui_focus.isSelected()
         except Exception: pass
         try: self._opt_debug = self._ui_debug.isSelected()
         except Exception: pass
