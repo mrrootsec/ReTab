@@ -8,7 +8,7 @@ from burp import IBurpExtender, IContextMenuFactory, ITab
 from javax.swing import (
     JPanel, JCheckBox, JLabel, JTextField, JScrollPane,
     JMenuItem, BorderFactory, Box, BoxLayout, SwingUtilities,
-    JTabbedPane                                                        : needed for tab switch
+    JTabbedPane                                                        
 )
 from java.awt import Font, Color, Dimension
 from java.util import ArrayList
