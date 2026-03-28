@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 
 """
-ReTab — Adds a context menu to send requests to Repeater with auto-generated tab names. Made with <3 by https://github.com/mrrootsec/ReTab
+ReTab — Adds a context menu to send requests to Repeater with auto-generated tab names.
 """
 from burp import IBurpExtender, IContextMenuFactory, ITab
-from javax.swing import ( JPanel, JCheckBox, JLabel, JTextField, JScrollPane, JMenuItem, BorderFactory, Box, BoxLayout, SwingUtilities, JTabbedPane )
+from javax.swing import (
+    JPanel, JCheckBox, JLabel, JTextField, JScrollPane,
+    JMenuItem, BorderFactory, Box, BoxLayout, SwingUtilities
+)
 from java.awt import Font, Color, Dimension
 from java.util import ArrayList
 from java.net import URLDecoder
@@ -46,7 +49,6 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self._opt_auth   = True
         self._opt_host   = False
         self._opt_debug  = False
-        self._opt_focus  = True
         self._opt_maxlen = 60
 
         callbacks.setExtensionName("ReTab")
@@ -98,42 +100,12 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                 self._cb.printError("[!] " + str(e))
                 self._send_fallback(svc, req)
 
-        if self._opt_focus:                                            
-            SwingUtilities.invokeLater(self._focus_repeater)           
-
     def _send_fallback(self, svc, req):
         try:
             is_https = svc.getProtocol().lower() == "https"
             self._cb.sendToRepeater(svc.getHost(), svc.getPort(), is_https, req, "request")
         except Exception:
             pass
-
-    # ═════════════════════════════════════════════════════════════
-    #  AUTO-SWITCH TO REPEATER TAB                        ← NEW
-    # ═════════════════════════════════════════════════════════════
-
-    def _focus_repeater(self):                                         
-        """Walk Burp's Swing tree and select the top-level Repeater tab."""
-        try:                                                           
-            window = SwingUtilities.getWindowAncestor(self._ui_scroll) 
-            self._select_tab(window, "Repeater")                       
-        except Exception:                                              
-            pass  # Silently fail — UI focus is non-critical           
-
-    def _select_tab(self, container, title):                           
-        """Recursively search for a JTabbedPane containing a tab with
-        the given title and select it. Returns True on first match."""
-        if isinstance(container, JTabbedPane):                         
-            for i in range(container.getTabCount()):                   
-                if container.getTitleAt(i) == title:                   
-                    container.setSelectedIndex(i)                      
-                    return True                                        
-        for i in range(container.getComponentCount()):                 
-            child = container.getComponent(i)                          
-            if hasattr(child, "getComponentCount"):                    
-                if self._select_tab(child, title):                     
-                    return True                                        
-        return False                                                   
 
     # ═════════════════════════════════════════════════════════════
     #  NAME GENERATION
@@ -424,9 +396,9 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         root.setLayout(BoxLayout(root, BoxLayout.Y_AXIS))
         root.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20))
 
-        root.add(_ui_label("ReTab", 16, True))
+        root.add(_ui_label("ReTab", 18, True))
         root.add(Box.createVerticalStrut(4))
-        root.add(_ui_label("Auto-generates meaningful Repeater tab names.", 12, False, Color(100, 100, 100)))
+        root.add(_ui_label("Auto-generates meaningful Repeater tab names. Made with <3 by https://github.com/mrrootsec/ReTab", 15, False, Color(0, 128, 0)))
         root.add(Box.createVerticalStrut(18))
 
         root.add(_ui_section("Naming"))
@@ -435,10 +407,6 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self._ui_normid = _ui_checkbox(root, "Normalize IDs",                 "/123 and UUIDs become /{id}",  self._opt_normid)
         self._ui_auth   = _ui_checkbox(root, "Auth context hint",             "Appends [..tok] or [user]",    self._opt_auth)
         self._ui_host   = _ui_checkbox(root, "Include host prefix",           "api-POST-/users for multi-host testing", self._opt_host)
-
-        root.add(Box.createVerticalStrut(14))
-        root.add(_ui_section("Behavior"))
-        self._ui_focus = _ui_checkbox(root, "Auto-switch to Repeater tab",    "Jump to Repeater after send",  self._opt_focus)
 
         root.add(Box.createVerticalStrut(14))
         root.add(_ui_section("Limits"))
@@ -482,8 +450,6 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         try: self._opt_auth = self._ui_auth.isSelected()
         except Exception: pass
         try: self._opt_host = self._ui_host.isSelected()
-        except Exception: pass
-        try: self._opt_focus = self._ui_focus.isSelected()
         except Exception: pass
         try: self._opt_debug = self._ui_debug.isSelected()
         except Exception: pass
