@@ -50,7 +50,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self._opt_auth   = True
         self._opt_host   = False
         self._opt_debug  = False
-        self._opt_focus  = True                                        : auto-switch default ON
+        self._opt_focus  = True                                        
         self._opt_maxlen = 60
 
         callbacks.setExtensionName("ReTab")
@@ -70,7 +70,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
 
     # ═════════════════════════════════════════════════════════════
     #  IContextMenuFactory
-    # ═══════��═════════════════════════════════════════════════════
+    # ═════════════════════════════════════════════════════════════
 
     def createMenuItems(self, ctx):
         if not ctx.getSelectedMessages():
@@ -102,8 +102,8 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                 self._cb.printError("[!] " + str(e))
                 self._send_fallback(svc, req)
 
-        if self._opt_focus:                                            : trigger switch after loop
-            SwingUtilities.invokeLater(self._focus_repeater)           : run on EDT
+        if self._opt_focus:                                            
+            SwingUtilities.invokeLater(self._focus_repeater)           
 
     def _send_fallback(self, svc, req):
         try:
@@ -441,8 +441,8 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self._ui_host   = _ui_checkbox(root, "Include host prefix",           "api-POST-/users for multi-host testing", self._opt_host)
 
         root.add(Box.createVerticalStrut(14))
-        root.add(_ui_section("Behavior"))                                                                      : section
-        self._ui_focus = _ui_checkbox(root, "Auto-switch to Repeater tab",    "Jump to Repeater after send",  self._opt_focus)  : checkbox
+        root.add(_ui_section("Behavior"))                                                                      
+        self._ui_focus = _ui_checkbox(root, "Auto-switch to Repeater tab",    "Jump to Repeater after send",  self._opt_focus)
 
         root.add(Box.createVerticalStrut(14))
         root.add(_ui_section("Limits"))
@@ -487,7 +487,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         except Exception: pass
         try: self._opt_host = self._ui_host.isSelected()
         except Exception: pass
-        try: self._opt_focus = self._ui_focus.isSelected()             : read checkbox
+        try: self._opt_focus = self._ui_focus.isSelected()             
         except Exception: pass
         try: self._opt_debug = self._ui_debug.isSelected()
         except Exception: pass
