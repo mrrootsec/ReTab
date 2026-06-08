@@ -237,7 +237,7 @@ That’s it.
 
 This extension was built with Claude Opus 4.6.
 
-There is no license attached. You can use it, modify it, share it, or rewrite it however you want. No credit required.
+There is no license attached. You can use it, modify it, share it, or rewrite it however you want.
 
 If it breaks something, that’s on you.
 If it saves you time, I’m glad it helped.
