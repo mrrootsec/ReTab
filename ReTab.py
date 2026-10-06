@@ -2,7 +2,11 @@
 # -*- coding: utf-8 -*-
 
 """
-ReTab — Adds a context menu to send requests to Repeater with auto-generated tab names.
+ReTab — Smart Repeater Tab Namer.
+
+Adds a context-menu action that sends selected requests to Burp Repeater
+with human-readable, auto-generated tab names (method, path, GraphQL
+operation, SOAP action, auth context, etc.).
 """
 from burp import IBurpExtender, IContextMenuFactory, ITab
 from javax.swing import ( JPanel, JCheckBox, JLabel, JTextField, JScrollPane, JMenuItem, BorderFactory, Box, BoxLayout, SwingUtilities, JTabbedPane )
@@ -10,10 +14,12 @@ from java.awt import Font, Color, Dimension
 from java.util import ArrayList
 from java.net import URLDecoder
 from collections import OrderedDict
+import hashlib
+import threading
 import re
 
 
-# ─── Precompiled Patterns (compiled once at module load) ─────────
+# Precompiled Patterns (compiled once at module load)
 _RE_GQL_OP = re.compile(r'(?:query|mutation|subscription)\s+([a-zA-Z0-9_]+)')
 _RE_HASH   = re.compile(r':\s*"([a-fA-F0-9]+)"')
 _RE_XML    = re.compile(r'<([a-zA-Z][\w.-]*:)?([a-zA-Z][\w.-]*)')
@@ -21,7 +27,7 @@ _RE_DIGITS = re.compile(r'^\d+$')
 _RE_UUID   = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-')
 _RE_HEX24  = re.compile(r'^[0-9a-fA-F]{24,}$')
 
-# ─── Constants ───────────────────────────────────────────────────
+# Constants
 _SOAP_SKIP = frozenset(["envelope", "header", "body", "xml"])
 _BODY_MAX  = 65536
 _SOAP_SCAN = 2048
@@ -31,14 +37,13 @@ _CACHE_CAP = 5000
 
 class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
 
-    # ═════════════════════════════════════════════════════════════
-    #  LIFECYCLE
-    # ═════════════════════════════════════════════════════════════
-
+    # LIFECYCLE
     def registerExtenderCallbacks(self, callbacks):
         self._cb = callbacks
         self._hl = callbacks.getHelpers()
         self._counts = OrderedDict()
+        self._busy = False
+        self._lock = threading.Lock()
 
         self._opt_method = True
         self._opt_query  = False
@@ -49,14 +54,12 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self._opt_focus  = True
         self._opt_maxlen = 60
 
-        callbacks.setExtensionName("ReTab")
+        callbacks.setExtensionName("ReTab, Smart Repeater Tab Namer")
         callbacks.registerContextMenuFactory(self)
         SwingUtilities.invokeLater(self._init_ui)
         callbacks.printOutput("[+] ReTab loaded")
 
-    # ═════════════════════════════════════════════════════════════
     #  ITab
-    # ═════════════════════════════════════════════════════════════
 
     def getTabCaption(self):
         return "ReTab"
@@ -64,9 +67,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
     def getUiComponent(self):
         return self._ui_scroll
 
-    # ═════════════════════════════════════════════════════════════
     #  IContextMenuFactory
-    # ═════════════════════════════════════════════════════════════
 
     def createMenuItems(self, ctx):
         if not ctx.getSelectedMessages():
@@ -77,31 +78,70 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             actionPerformed=lambda _: self._on_send(ctx)))
         return items
 
-    # ═════════════════════════════════════════════════════════════
-    #  SEND LOGIC
-    # ═════════════════════════════════════════════════════════════
-
+    # SEND LOGIC
     def _on_send(self, ctx):
+        """EDT entry point: snapshot state, defer analysis to a worker thread."""
+        if self._busy:
+            if self._opt_debug:
+                self._cb.printOutput("[>] ReTab: send in progress; ignored")
+            return
+
         self._sync_options()
+
+        # getSelectedMessages() returns live selection state — copy it off
+        # the EDT before handing to the background thread.
+        tmp = ctx.getSelectedMessages()
+        msgs = list(tmp) if tmp else []
+        if not msgs:
+            return
+
+        self._busy = True
+        t = threading.Thread(target=self._bg_send, args=(msgs,))
+        t.setDaemon(True)
+        t.start()
+
+    def _bg_send(self, msgs):
+        """Worker: expensive naming/parsing off-EDT; results back via invokeLater."""
+        results = []               # (svc, req, name)
         last_name = None
-        for msg in ctx.getSelectedMessages():
+
+        for msg in msgs:
             req = msg.getRequest()
             svc = msg.getHttpService()
             if req is None or svc is None:
                 continue
             try:
-                is_https = svc.getProtocol().lower() == "https"
                 name = self._dedupe(self._name_for(svc, req))
-                self._cb.sendToRepeater(svc.getHost(), svc.getPort(), is_https, req, name)
+                results.append((svc, req, name))
                 last_name = name
                 if self._opt_debug:
                     self._cb.printOutput("[>] " + name)
             except Exception as e:
                 self._cb.printError("[!] " + str(e))
-                self._send_fallback(svc, req)
+                results.append((svc, req, None))  # fall back to generic name
 
-        if self._opt_focus and last_name:
-            SwingUtilities.invokeLater(lambda: self._focus_repeater(last_name))
+        SwingUtilities.invokeLater(lambda: self._finish_send(results, last_name))
+
+    def _finish_send(self, results, last_name):
+        """EDT: call sendToRepeater (API thread contract) and restore state."""
+        try:
+            for svc, req, name in results:
+                try:
+                    is_https = svc.getProtocol().lower() == "https"
+                    if name is None:
+                        self._send_fallback(svc, req)
+                    else:
+                        self._cb.sendToRepeater(
+                            svc.getHost(), svc.getPort(),
+                            is_https, req, name)
+                except Exception as e:
+                    self._cb.printError("[!] " + str(e))
+                    self._send_fallback(svc, req)
+
+            if self._opt_focus and last_name:
+                self._focus_repeater(last_name)
+        finally:
+            self._busy = False
 
     def _send_fallback(self, svc, req):
         try:
@@ -110,10 +150,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         except Exception:
             pass
 
-    # ═════════════════════════════════════════════════════════════
-    #  AUTO-SWITCH TO REPEATER TAB
-    # ═════════════════════════════════════════════════════════════
-
+    # AUTO-SWITCH TO REPEATER TAB
     def _focus_repeater(self, tab_name):
         try:
             window = SwingUtilities.getWindowAncestor(self._ui_scroll)
@@ -150,8 +187,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                     return True
         return False
 
-    # ═════════════════════════════════════════════════════════════
-    #  NAME GENERATION
+    # NAME GENERATION
     #
     #  Priority chain (order matters):
     #    1. WebSocket — checked first because a WS upgrade to /graphql
@@ -161,7 +197,6 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
     #    3. SOAP/XML — action tag inside the body is more meaningful
     #       than the generic POST /service path.
     #    4. REST — fallback; method + path is always available.
-    # ═════════════════════════════════════════════════════════════
 
     def _name_for(self, svc, req):
         try:
@@ -197,7 +232,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
 
         return self._cap(name)
 
-    # ─── Path / Query ────────────────────────────────────────────
+    # Path / Query
 
     def _path_query(self, info, hdrs):
         try:
@@ -222,7 +257,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             pass
         return "/", None
 
-    # ─── GraphQL ─────────────────────────────────────────────────
+    # GraphQL
 
     def _looks_graphql(self, path, q, hdr_map, body):
         if path and "graphql" in path.lower():
@@ -273,7 +308,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         m = _RE_HASH.search(body, idx + 10, min(idx + 90, len(body)))
         return m.group(1) if m else None
 
-    # ─── SOAP ────────────────────────────────────────────────────
+    # SOAP
 
     def _soap_name(self, body):
         scan = body[:_SOAP_SCAN]
@@ -288,7 +323,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             pos = m.end()
         return "SOAP-request"
 
-    # ─── REST ────────────────────────────────────────────────────
+    # REST
 
     def _rest_name(self, method, path, q, hdr_map):
         override = hdr_map.get("x-http-method-override", "")
@@ -322,7 +357,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
 
         return "".join(parts)
 
-    # ─── Auth Hint ───────────────────────────────────────────────
+    # Auth Hint
 
     def _auth_tag(self, hdr_map):
         val = hdr_map.get("authorization", "")
@@ -333,8 +368,10 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             if low.startswith("bearer "):
                 tok = val[7:].strip()
                 if len(tok) >= 8:
-                    h = hash(tok[-8:]) % 0xFFFF
-                    return "[#%04x]" % h
+                    # md5, not hash(): hash() is salted per process, so the
+                    # same token would map to a different tag across restarts.
+                    digest = hashlib.md5(tok[-8:]).hexdigest()
+                    return "[#%s]" % digest[:4]
                 return "[bearer]"
             if low.startswith("basic "):
                 from java.util import Base64 as JB64
@@ -347,10 +384,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             pass
         return ""
 
-    # ═════════════════════════════════════════════════════════════
-    #  UTILITIES
-    # ═════════════════════════════════════════════════════════════
-
+    # UTILITIES
     def _method(self, hdrs):
         try:
             return hdrs.get(0).split(" ", 2)[0] if hdrs and hdrs.size() > 0 else "GET"
@@ -421,19 +455,17 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         return name[:limit - 3] + "..."
 
     def _dedupe(self, name):
-        if name in self._counts:
-            self._counts[name] += 1
-        else:
-            self._counts[name] = 1
-        n = self._counts[name]
-        if len(self._counts) > _CACHE_CAP:
-            self._counts.popitem(last=False)
-        return "%s (%d)" % (name, n) if n > 1 else name
+        with self._lock:
+            if name in self._counts:
+                self._counts[name] += 1
+            else:
+                self._counts[name] = 1
+            n = self._counts[name]
+            if len(self._counts) > _CACHE_CAP:
+                self._counts.popitem(last=False)
+            return "%s (%d)" % (name, n) if n > 1 else name
 
-    # ═════════════════════════════════════════════════════════════
-    #  SETTINGS UI
-    # ═════════════════════════════════════════════════════════════
-
+    # SETTINGS UI
     def _init_ui(self):
         root = JPanel()
         root.setLayout(BoxLayout(root, BoxLayout.Y_AXIS))
@@ -509,10 +541,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         except Exception:
             pass
 
-
-# ═════════════════════════════════════════════════════════════════
-#  MODULE-LEVEL PURE FUNCTIONS
-# ═════════════════════════════════════════════════════════════════
+# MODULE-LEVEL PURE FUNCTIONS
 
 def _extract_json_str(text, key):
     tag = '"%s"' % key
@@ -553,7 +582,7 @@ def _qs_value(qs, key):
     return None
 
 
-# ─── UI Helpers (stateless) ──────────────────────────────────────
+# UI Helpers (stateless)
 
 def _ui_label(text, size, bold, color=None):
     lbl = JLabel(text)
